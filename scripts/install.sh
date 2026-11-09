@@ -4,10 +4,8 @@ umask 022
 
 PREFIX="${HOME}/.local"
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/split-egress"
-MIHOMO_TARGET="${HOME}/.config/mihomo/config.yaml"
 DRY_RUN=false
 FORCE=false
-WITH_MIHOMO=false
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 
@@ -20,8 +18,6 @@ Options:
   --force                   Backup and replace existing files
   --prefix DIR              Install prefix (default: ~/.local)
   --config-dir DIR          Configuration directory
-  --with-mihomo-config      Install the example mihomo config
-  --mihomo-config PATH      Target mihomo config path
   --help, -h                Show this help
 EOF
 }
@@ -93,15 +89,6 @@ while (($#)); do
             CONFIG_DIR="$2"
             shift 2
             ;;
-        --with-mihomo-config)
-            WITH_MIHOMO=true
-            shift
-            ;;
-        --mihomo-config)
-            need_value "$1" "${2:-}"
-            MIHOMO_TARGET="$2"
-            shift 2
-            ;;
         --help|-h)
             usage
             exit 0
@@ -124,24 +111,9 @@ if [[ "$PREFIX" == /usr* && "$EUID" -ne 0 ]]; then
     exit 2
 fi
 
-if $WITH_MIHOMO; then
-    if ! command -v mihomo >/dev/null 2>&1; then
-        printf 'mihomo is not installed\n' >&2
-        exit 2
-    fi
-    if ! mihomo -t -f "$ROOT_DIR/config/mihomo.example.yaml" >/dev/null 2>&1; then
-        printf 'mihomo example config is invalid\n' >&2
-        exit 2
-    fi
-fi
-
 install_file "$ROOT_DIR/bin/egress-check" "$PREFIX/bin/egress-check" 0755
 install_file "$ROOT_DIR/scripts/routing-up.sh" "$PREFIX/lib/split-egress/routing-up.sh" 0755
 install_file "$ROOT_DIR/config/egress-check.example.env" "$CONFIG_DIR/config.env" 0644
-
-if $WITH_MIHOMO; then
-    install_file "$ROOT_DIR/config/mihomo.example.yaml" "$MIHOMO_TARGET" 0644
-fi
 
 if $DRY_RUN; then
     printf '\ndry run complete\n'
@@ -153,7 +125,7 @@ printf '  config: %s\n' "$CONFIG_DIR/config.env"
 printf '  routing: %s\n' "$PREFIX/lib/split-egress/routing-up.sh"
 
 if [[ ":$PATH:" != *":$PREFIX/bin:"* ]]; then
-    printf '\nadd to PATH: export PATH="%s/bin:$PATH"\n' "$PREFIX"
+    printf '\nadd to PATH: put %s/bin in your PATH\n' "$PREFIX"
 fi
 
 printf '\nnext\n'

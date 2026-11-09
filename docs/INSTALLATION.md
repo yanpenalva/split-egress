@@ -171,13 +171,7 @@ sudo systemctl restart mihomo
 sudo systemctl status mihomo
 ```
 
-The installer can also copy the example for you:
-
-```bash
-./scripts/install.sh --with-mihomo-config --mihomo-config /etc/mihomo/config.yaml
-```
-
-That path requires root and refuses to overwrite an existing file unless `--force` is set.
+The installer only writes under your home directory. It deliberately does not copy files into `/etc`; use the manual `sudo cp` above for system-level configuration.
 
 ## 6. Apply policy routing
 
@@ -303,7 +297,7 @@ sudo systemctl restart mihomo
 | Issue | Safeguard |
 |---|---|
 | Missing `dig` or `curl` | Installer and checker report missing commands |
-| mihomo not installed | Installer refuses `--with-mihomo-config` |
+| mihomo not installed | Checker warns; install mihomo before starting |
 | Invalid mihomo config | `mihomo -t` runs before install and in the checker |
 | Existing config overwritten | Backups and `--force` requirement |
 | Interface name wrong | Checker compares the env file with the mihomo config |

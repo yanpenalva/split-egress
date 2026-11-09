@@ -36,6 +36,7 @@ Options:
   --dry-run            Validate configuration without network probes
   --redact-ips         Hide IP addresses in output
   --timeout SECONDS    Network timeout in seconds
+  --version            Show version
   --help, -h           Show this help
 EOF
 }
@@ -134,7 +135,7 @@ check_config() {
 }
 
 check_routing() {
-    local route rpf
+    local route rpf group_now
     section 2 "Routing"
     route=$(ip route show table "$ROUTING_TABLE" 2>/dev/null | grep -m1 '^default' || true)
     if [[ -n "$route" ]]; then
@@ -168,6 +169,14 @@ check_routing() {
             ok "primary path: 1.1.1.1 via $PRIMARY_IF"
         else
             warn "primary path: 1.1.1.1 not via $PRIMARY_IF"
+        fi
+    fi
+    if command -v jq >/dev/null 2>&1; then
+        group_now=$(curl -s --max-time 2 "$MIHOMO_API/proxies/$SECONDARY_GROUP" 2>/dev/null | jq -r '.now // empty' 2>/dev/null || true)
+        if [[ -n "$group_now" ]]; then
+            ok "group $SECONDARY_GROUP -> $group_now"
+        else
+            warn "group $SECONDARY_GROUP not reachable"
         fi
     fi
 }
@@ -309,6 +318,10 @@ while (($#)); do
             ;;
         --help|-h)
             usage
+            exit 0
+            ;;
+        --version)
+            printf 'egress-check %s\n' "$VERSION"
             exit 0
             ;;
         *)
