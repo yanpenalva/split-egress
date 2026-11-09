@@ -1,5 +1,7 @@
 # split-egress
 
+[![ci](https://github.com/yanpenalva/split-egress/actions/workflows/ci.yml/badge.svg)](https://github.com/yanpenalva/split-egress/actions/workflows/ci.yml)
+
 Per-provider egress policy and verification for Linux.
 
 `split-egress` steers selected AI provider domains over a dedicated secondary WAN while keeping all other traffic on the primary WAN. It uses mihomo for rule-based proxying, Linux policy routing for interface selection, and a single verification command to prove the result.
