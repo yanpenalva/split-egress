@@ -1,0 +1,366 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+VERSION="1.0.0"
+DEFAULT_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/split-egress/config.env"
+CONFIG_FILE="$DEFAULT_CONFIG"
+DRY_RUN=false
+REDACT_IPS=false
+CURL_TIMEOUT="8"
+CLI_MIHOMO_CONFIG=""
+CLI_TIMEOUT=""
+PRIMARY_IF=""
+SECONDARY_IF=""
+PROXY_URL="http://127.0.0.1:7890"
+MIHOMO_API="http://127.0.0.1:9090"
+MIHOMO_CONFIG="$HOME/.config/mihomo/config.yaml"
+MIHOMO_DNS=""
+INTERNAL_URL=""
+IP_ECHO_URL="https://ifconfig.me"
+LATENCY_HOST="api.anthropic.com"
+ROUTING_TABLE="100"
+ROUTING_MARK="100"
+SECONDARY_GROUP="secondary"
+AI_HOSTS="api.openai.com api.anthropic.com gemini.google.com generativelanguage.googleapis.com opencode.ai openrouter.ai api.cline.bot api.deepseek.com api.z.ai"
+AI_DOMAINS="openai.com chatgpt.com anthropic.com claude.ai gemini.google.com generativelanguage.googleapis.com opencode.ai openrouter.ai cline.bot deepseek.com z.ai"
+FAIL=0
+WARN=0
+
+usage() {
+    cat <<'EOF'
+Usage: egress-check [options]
+
+Options:
+  --config PATH        Environment file
+  --mihomo-config PATH Mihomo configuration file
+  --dry-run            Validate configuration without network probes
+  --redact-ips         Hide IP addresses in output
+  --timeout SECONDS    Network timeout in seconds
+  --help, -h           Show this help
+EOF
+}
+
+section() {
+    printf '\n[%s] %s\n' "$1" "$2"
+}
+
+ok() {
+    printf '  OK    %s\n' "$*"
+}
+
+warn() {
+    printf '  WARN  %s\n' "$*"
+    WARN=$((WARN + 1))
+}
+
+fail() {
+    printf '  FAIL  %s\n' "$*"
+    FAIL=$((FAIL + 1))
+}
+
+need_value() {
+    if [[ $# -lt 2 || -z "$2" ]]; then
+        printf 'missing value for %s\n' "$1" >&2
+        exit 2
+    fi
+}
+
+check_dependencies() {
+    local cmd missing
+    missing=""
+    for cmd in ip curl awk grep sed dig; do
+        command -v "$cmd" >/dev/null 2>&1 || missing="$missing $cmd"
+    done
+    section 0 "Dependencies"
+    if [[ -z "$missing" ]]; then
+        ok "required commands"
+    else
+        fail "missing commands:$missing"
+    fi
+    command -v mihomo >/dev/null 2>&1 || warn "mihomo not installed"
+    command -v jq >/dev/null 2>&1 || warn "jq not installed"
+    command -v vnstat >/dev/null 2>&1 || warn "vnstat not installed"
+}
+
+resolve_interfaces() {
+    if [[ -z "$PRIMARY_IF" ]]; then
+        PRIMARY_IF=$(ip route show default 2>/dev/null | awk 'NR==1 {for (i=1;i<=NF;i++) if ($i=="dev") {print $(i+1); exit}}')
+    fi
+    if [[ -z "$SECONDARY_IF" ]]; then
+        SECONDARY_IF=$(awk '/^[[:space:]]*interface-name:/ {print $2; exit}' "$MIHOMO_CONFIG" 2>/dev/null || true)
+    fi
+    if [[ -z "$SECONDARY_IF" ]]; then
+        fail "secondary interface is not set"
+    fi
+}
+
+check_config() {
+    local domain missing
+    section 1 "Configuration"
+    if [[ ! -f "$MIHOMO_CONFIG" ]]; then
+        fail "mihomo config not found: $MIHOMO_CONFIG"
+        return
+    fi
+    ok "mihomo config: $MIHOMO_CONFIG"
+    if awk -v value="$SECONDARY_IF" '$1=="interface-name:" && $2==value {found=1} END {exit !found}' "$MIHOMO_CONFIG"; then
+        ok "secondary interface: $SECONDARY_IF"
+    else
+        fail "secondary interface not found: $SECONDARY_IF"
+    fi
+    if awk -v value="$ROUTING_MARK" '$1=="routing-mark:" && $2==value {found=1} END {exit !found}' "$MIHOMO_CONFIG"; then
+        ok "routing mark: $ROUTING_MARK"
+    else
+        fail "routing mark not found: $ROUTING_MARK"
+    fi
+    missing=0
+    for domain in $AI_DOMAINS; do
+        if ! awk -v value="DOMAIN-SUFFIX,$domain,$SECONDARY_GROUP" '$1=="-" && $2==value {found=1} END {exit !found}' "$MIHOMO_CONFIG"; then
+            fail "rule missing: $domain -> $SECONDARY_GROUP"
+            missing=$((missing + 1))
+        fi
+    done
+    if [[ "$missing" -eq 0 ]]; then
+        ok "AI domain rules: $SECONDARY_GROUP"
+    fi
+    if command -v mihomo >/dev/null 2>&1; then
+        if mihomo -t -f "$MIHOMO_CONFIG" >/dev/null 2>&1; then
+            ok "mihomo config validation"
+        else
+            fail "mihomo config validation"
+        fi
+    else
+        warn "mihomo not installed; skipped config validation"
+    fi
+}
+
+check_routing() {
+    local route rpf
+    section 2 "Routing"
+    route=$(ip route show table "$ROUTING_TABLE" 2>/dev/null | grep -m1 '^default' || true)
+    if [[ -n "$route" ]]; then
+        ok "table $ROUTING_TABLE: $route"
+    else
+        fail "table $ROUTING_TABLE has no default route"
+    fi
+    if ip rule 2>/dev/null | grep -qE "fwmark $MARK_HEX([[:space:]]|$)"; then
+        ok "fwmark $MARK_HEX -> table $ROUTING_TABLE"
+    else
+        fail "fwmark $MARK_HEX rule missing"
+    fi
+    rpf=$(sysctl -n "net.ipv4.conf.${SECONDARY_IF}.rp_filter" 2>/dev/null || true)
+    if [[ "$rpf" == "2" ]]; then
+        ok "rp_filter $SECONDARY_IF=2"
+    else
+        fail "rp_filter $SECONDARY_IF=${rpf:-unknown}"
+    fi
+    if [[ -z "$(ip -6 addr show dev "$SECONDARY_IF" scope global 2>/dev/null)" ]]; then
+        ok "IPv6 disabled on $SECONDARY_IF"
+    else
+        fail "IPv6 active on $SECONDARY_IF"
+    fi
+    if ip route get 1.1.1.1 oif "$SECONDARY_IF" 2>/dev/null | grep -q "dev $SECONDARY_IF"; then
+        ok "secondary path: 1.1.1.1 via $SECONDARY_IF"
+    else
+        fail "secondary path: 1.1.1.1 not via $SECONDARY_IF"
+    fi
+    if [[ -n "$PRIMARY_IF" ]]; then
+        if ip route get 1.1.1.1 2>/dev/null | grep -q "dev $PRIMARY_IF"; then
+            ok "primary path: 1.1.1.1 via $PRIMARY_IF"
+        else
+            warn "primary path: 1.1.1.1 not via $PRIMARY_IF"
+        fi
+    fi
+}
+
+check_ip() {
+    local direct proxy internal
+    section 3 "IP audit"
+    direct=$(curl -fsS --max-time "$CURL_TIMEOUT" --noproxy '*' "$IP_ECHO_URL" 2>/dev/null || true)
+    proxy=$(curl -fsS --max-time "$CURL_TIMEOUT" --proxy "$PROXY_URL" "$IP_ECHO_URL" 2>/dev/null || true)
+    if [[ -z "$direct" || -z "$proxy" ]]; then
+        fail "could not read direct or proxy IP"
+        return
+    fi
+    if [[ "$direct" == "$proxy" ]]; then
+        fail "direct and proxy IPs match"
+        return
+    fi
+    if $REDACT_IPS; then
+        ok "direct and proxy IPs are distinct"
+    else
+        ok "direct=$direct proxy=$proxy"
+    fi
+    if [[ -n "$INTERNAL_URL" ]]; then
+        internal=$(curl -s -o /dev/null -w '%{http_code}' --noproxy '*' --max-time "$CURL_TIMEOUT" "$INTERNAL_URL" 2>/dev/null || true)
+        if [[ -n "$internal" && "$internal" != "000" ]]; then
+            ok "internal $INTERNAL_URL HTTP $internal direct"
+        else
+            warn "internal $INTERNAL_URL unreachable direct"
+        fi
+    fi
+}
+
+dns_lookup() {
+    local host dns_host dns_port
+    host="$1"
+    if [[ -z "$MIHOMO_DNS" ]]; then
+        dig +short "$host" 2>/dev/null | grep -E '^[0-9]' | head -1 || true
+        return
+    fi
+    dns_host="${MIHOMO_DNS%%:*}"
+    dns_port="${MIHOMO_DNS##*:}"
+    if [[ "$dns_host" == "$dns_port" ]]; then
+        dns_port="53"
+    fi
+    dig +short "@$dns_host" -p "$dns_port" "$host" 2>/dev/null | grep -E '^[0-9]' | head -1 || true
+}
+
+check_providers() {
+    local host result code time dns attempt retry
+    section 4 "AI providers"
+    for host in $AI_HOSTS; do
+        retry=""
+        for attempt in 1 2; do
+            result=$(curl -s -o /dev/null -w '%{http_code} %{time_total}' --max-time "$CURL_TIMEOUT" --proxy "$PROXY_URL" "https://$host" 2>/dev/null || true)
+            code="${result%% *}"
+            time="${result##* }"
+            if [[ -n "$code" && "$code" != "000" ]]; then
+                if [[ "$attempt" -eq 2 ]]; then
+                    retry=" retry"
+                fi
+                break
+            fi
+            if [[ "$attempt" -eq 1 ]]; then
+                sleep 1
+            fi
+        done
+        dns=$(dns_lookup "$host")
+        if [[ -n "$code" && "$code" != "000" ]]; then
+            if [[ -n "$dns" ]]; then
+                ok "$host HTTP $code ${time}s DNS $dns$retry"
+            else
+                ok "$host HTTP $code ${time}s DNS fail$retry"
+            fi
+        else
+            fail "$host unreachable via $PROXY_URL"
+        fi
+    done
+}
+
+check_latency() {
+    local direct proxy
+    section 5 "Latency"
+    direct=$(curl -s -o /dev/null --noproxy '*' --max-time "$CURL_TIMEOUT" -w '%{time_total}' "https://$LATENCY_HOST" 2>/dev/null || true)
+    proxy=$(curl -s -o /dev/null --proxy "$PROXY_URL" --max-time "$CURL_TIMEOUT" -w '%{time_total}' "https://$LATENCY_HOST" 2>/dev/null || true)
+    printf '  direct=%ss proxy=%ss host=%s\n' "${direct:-fail}" "${proxy:-fail}" "$LATENCY_HOST"
+}
+
+check_data() {
+    section 6 "Data usage"
+    if ! command -v vnstat >/dev/null 2>&1; then
+        printf '  vnstat not installed; skipped\n'
+        return
+    fi
+    if [[ -z "$SECONDARY_IF" ]]; then
+        printf '  secondary interface unset; skipped\n'
+        return
+    fi
+    vnstat -i "$SECONDARY_IF" -d 1 2>/dev/null | grep -E '^[[:space:]]*[0-9]{4}-' | tail -1 | sed 's/^[[:space:]]*//' || printf '  no data\n'
+}
+
+dry_run() {
+    section 7 "Dry run"
+    printf '  config:        %s\n' "$CONFIG_FILE"
+    printf '  mihomo config: %s\n' "$MIHOMO_CONFIG"
+    printf '  proxy:         %s\n' "$PROXY_URL"
+    printf '  primary if:    %s\n' "${PRIMARY_IF:-auto}"
+    printf '  secondary if:  %s\n' "${SECONDARY_IF:-unset}"
+    printf '  table:         %s\n' "$ROUTING_TABLE"
+    printf '  mark:          %s (%s)\n' "$ROUTING_MARK" "$MARK_HEX"
+    printf '  ai hosts:      %s\n' "$AI_HOSTS"
+    printf '  ai domains:    %s\n' "$AI_DOMAINS"
+    printf '  checks:        routing ipv6 config proxy providers dns latency data\n'
+}
+
+while (($#)); do
+    case "$1" in
+        --config)
+            need_value "$1" "${2:-}"
+            CONFIG_FILE="$2"
+            shift 2
+            ;;
+        --mihomo-config)
+            need_value "$1" "${2:-}"
+            CLI_MIHOMO_CONFIG="$2"
+            shift 2
+            ;;
+        --dry-run)
+            DRY_RUN=true
+            shift
+            ;;
+        --redact-ips)
+            REDACT_IPS=true
+            shift
+            ;;
+        --timeout)
+            need_value "$1" "${2:-}"
+            CLI_TIMEOUT="$2"
+            shift 2
+            ;;
+        --help|-h)
+            usage
+            exit 0
+            ;;
+        *)
+            printf 'unknown option: %s\n' "$1" >&2
+            usage >&2
+            exit 2
+            ;;
+    esac
+done
+
+if [[ -f "$CONFIG_FILE" ]]; then
+    source "$CONFIG_FILE"
+else
+    printf 'config not found: %s\n' "$CONFIG_FILE" >&2
+    exit 2
+fi
+
+if [[ -n "$CLI_MIHOMO_CONFIG" ]]; then
+    MIHOMO_CONFIG="$CLI_MIHOMO_CONFIG"
+fi
+if [[ -n "$CLI_TIMEOUT" ]]; then
+    CURL_TIMEOUT="$CLI_TIMEOUT"
+fi
+
+if ! [[ "$ROUTING_MARK" =~ ^[0-9]+$ ]]; then
+    printf 'ROUTING_MARK must be decimal\n' >&2
+    exit 2
+fi
+MARK_HEX=$(printf '0x%x' "$ROUTING_MARK")
+
+check_dependencies
+resolve_interfaces
+check_config
+
+if $DRY_RUN; then
+    dry_run
+    if [[ "$FAIL" -gt 0 ]]; then
+        printf '\nRESULT: FAIL (%s issue(s), %s warning(s))\n' "$FAIL" "$WARN"
+        exit 1
+    fi
+    printf '\nRESULT: OK (dry run)\n'
+    exit 0
+fi
+
+check_routing
+check_ip
+check_providers
+check_latency
+check_data
+
+if [[ "$FAIL" -gt 0 ]]; then
+    printf '\nRESULT: FAIL (%s issue(s), %s warning(s))\n' "$FAIL" "$WARN"
+    exit 1
+fi
+printf '\nRESULT: OK (0 issues, %s warning(s))\n' "$WARN"

@@ -1,0 +1,79 @@
+port: 7890
+socks-port: 7891
+mode: rule
+log-level: warning
+allow-lan: false
+external-controller: 127.0.0.1:9090
+
+ipv6: false
+
+dns:
+  enable: true
+  ipv6: false
+  listen: 127.0.0.1:1053
+  enhanced-mode: redir-host
+  nameserver:
+    - 192.0.2.53
+    - 1.1.1.1
+  nameserver-policy:
+    "*.internal.example": "192.0.2.53"
+    "internal.example": "192.0.2.53"
+    "openai.com": "https://1.1.1.1/dns-query"
+    "+.openai.com": "https://1.1.1.1/dns-query"
+    "chatgpt.com": "https://1.1.1.1/dns-query"
+    "+.chatgpt.com": "https://1.1.1.1/dns-query"
+    "anthropic.com": "https://1.1.1.1/dns-query"
+    "+.anthropic.com": "https://1.1.1.1/dns-query"
+    "claude.ai": "https://1.1.1.1/dns-query"
+    "+.claude.ai": "https://1.1.1.1/dns-query"
+    "opencode.ai": "https://1.1.1.1/dns-query"
+    "+.opencode.ai": "https://1.1.1.1/dns-query"
+    "openrouter.ai": "https://1.1.1.1/dns-query"
+    "+.openrouter.ai": "https://1.1.1.1/dns-query"
+    "cline.bot": "https://1.1.1.1/dns-query"
+    "+.cline.bot": "https://1.1.1.1/dns-query"
+    "deepseek.com": "https://1.1.1.1/dns-query"
+    "+.deepseek.com": "https://1.1.1.1/dns-query"
+    "z.ai": "https://1.1.1.1/dns-query"
+    "+.z.ai": "https://1.1.1.1/dns-query"
+    "gemini.google.com": "https://1.1.1.1/dns-query"
+    "generativelanguage.googleapis.com": "https://1.1.1.1/dns-query"
+    "+.generativelanguage.googleapis.com": "https://1.1.1.1/dns-query"
+
+proxies:
+  - name: "secondary-uplink"
+    type: direct
+    interface-name: wwan0
+    routing-mark: 100
+    ip-version: ipv4
+    tfo: true
+
+proxy-groups:
+  - name: "secondary"
+    type: fallback
+    url: http://www.gstatic.com/generate_204
+    interval: 60
+    proxies:
+      - secondary-uplink
+
+rules:
+  - DOMAIN-SUFFIX,internal.example,DIRECT
+  - IP-CIDR,10.0.0.0/8,DIRECT
+  - IP-CIDR,172.16.0.0/12,DIRECT
+  - IP-CIDR,192.168.0.0/16,DIRECT
+  - DOMAIN-SUFFIX,openai.com,secondary
+  - DOMAIN-SUFFIX,chatgpt.com,secondary
+  - DOMAIN-SUFFIX,anthropic.com,secondary
+  - DOMAIN-SUFFIX,claude.ai,secondary
+  - DOMAIN-SUFFIX,gemini.google.com,secondary
+  - DOMAIN-SUFFIX,generativelanguage.googleapis.com,secondary
+  - DOMAIN-SUFFIX,opencode.ai,secondary
+  - DOMAIN-SUFFIX,openrouter.ai,secondary
+  - DOMAIN-SUFFIX,cline.bot,secondary
+  - DOMAIN-SUFFIX,deepseek.com,secondary
+  - DOMAIN-SUFFIX,z.ai,secondary
+  - DOMAIN-SUFFIX,ifconfig.me,secondary
+  - DOMAIN-SUFFIX,ipinfo.io,secondary
+  - DOMAIN-SUFFIX,icanhazip.com,secondary
+  - DOMAIN-SUFFIX,ident.me,secondary
+  - MATCH,DIRECT

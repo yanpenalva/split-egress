@@ -1,0 +1,17 @@
+[Unit]
+Description=split-egress policy routing
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+Environment=SECONDARY_IF=wwan0
+Environment=SECONDARY_GW=192.0.2.1
+Environment=ROUTING_TABLE=100
+Environment=ROUTING_MARK=100
+ExecStart=/usr/local/lib/split-egress/routing-up.sh
+ExecStop=/usr/local/lib/split-egress/routing-up.sh --down
+
+[Install]
+WantedBy=multi-user.target
