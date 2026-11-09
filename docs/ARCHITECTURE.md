@@ -148,6 +148,8 @@ Before changing a rule, confirm which endpoint the client actually uses:
 
 The example configuration lists provider domains, not model names. Treat that list as a starting point.
 
+If the gateway is directly reachable and you accept primary-WAN visibility, remove its rule and add the gateway domain to `NO_PROXY`. Do not remove the provider API rule unless the API is also directly reachable.
+
 ## Verification model
 
 `egress-check` is not a configuration linter. It exercises the live path:

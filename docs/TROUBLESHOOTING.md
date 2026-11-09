@@ -160,6 +160,8 @@ grep -n "ifconfig.me" /etc/mihomo/config.yaml
 
 The example routes `ifconfig.me` to `secondary`.
 
+If the echo request fails entirely, the service may be unreachable over the secondary link. Try another `IP_ECHO_URL`, such as `https://ipinfo.io/ip`, `https://icanhazip.com`, or `https://ident.me`. Confirm the chosen domain is routed to the secondary group; a domain that falls through to `MATCH,DIRECT` reports the primary address even when requested through the proxy.
+
 ## `provider unreachable` or HTTP `000`
 
 The proxy completed the connection locally but the upstream request failed.
