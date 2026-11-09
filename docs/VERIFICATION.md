@@ -50,6 +50,7 @@ Warnings do not change the exit code when every required check passes. They indi
   OK    IPv6 disabled on wwan0
   OK    secondary path: 1.1.1.1 via wwan0
   OK    primary path: 1.1.1.1 via wan0
+  OK    group secondary -> secondary-uplink
 
 [3] IP audit
   OK    direct=203.0.113.10 proxy=198.51.100.20
@@ -105,6 +106,7 @@ Checks:
 - The secondary interface has no global IPv6 address.
 - `ip route get 1.1.1.1 oif <secondary>` uses the secondary interface.
 - `ip route get 1.1.1.1` uses the primary interface.
+- The mihomo group named by `SECONDARY_GROUP` is reachable and reports the expected outbound when `jq` is installed.
 
 A missing fwmark rule or table route means the kernel will not send marked traffic over the secondary WAN.
 

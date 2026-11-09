@@ -115,6 +115,12 @@ That is intentional:
 
 The verifier should be run after any change to the secondary link. A request that fails when the secondary link is intentionally disabled is the expected result.
 
+## Improving reliability without a corporate fallback
+
+Adding the primary WAN to the group defeats the isolation. If the secondary link is unreliable, add a second non-corporate uplink instead — for example, a personal Wi-Fi hotspot — and gate it by SSID. Do not add `DIRECT` or a primary outbound to the group.
+
+A second non-corporate uplink preserves the fail-closed property: AI traffic can move between non-corporate paths, but it never falls back to the primary WAN.
+
 ## Why `MATCH,DIRECT`
 
 The final rule sends everything not explicitly listed to `DIRECT`, which uses the primary routing table.
@@ -126,6 +132,21 @@ This keeps the blast radius small:
 - Only the listed AI domains use the secondary WAN.
 
 The tradeoff is that a new AI provider is not steered until its domain is added. The verifier checks every domain in `AI_DOMAINS`, so adding a provider requires updating both the mihomo config and the environment file.
+
+## Provider gateway vs provider API
+
+A model name is not an egress policy.
+
+Some clients access models through a gateway domain. For example, OpenCode Go serves models through `opencode.ai`, while the direct DeepSeek API is `api.deepseek.com`. A DeepSeek model can therefore work while the direct DeepSeek API does not, and the two paths can have different reachability, TLS inspection, and DNS behavior.
+
+Before changing a rule, confirm which endpoint the client actually uses:
+
+1. Check the provider configuration and the client's base URL.
+2. Inspect the TLS certificate issuer on the direct path.
+3. Compare a direct request with a proxied request.
+4. Add or remove the gateway domain, not the model name.
+
+The example configuration lists provider domains, not model names. Treat that list as a starting point.
 
 ## Verification model
 

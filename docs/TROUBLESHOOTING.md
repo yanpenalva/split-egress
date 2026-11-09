@@ -182,6 +182,8 @@ Common causes:
 
 If `tfo: true` is the only recent change, set it to `false` and retest.
 
+If the secondary link is reachable but slow, raise `CURL_TIMEOUT` in `config.env` — for example, `12` or `15` — and rerun. The checker retries once, but a single request can still exceed a short timeout.
+
 ## `DNS fail`
 
 The mihomo DNS listener did not return an address.
@@ -243,6 +245,12 @@ Add:
 3. The API host to `AI_HOSTS`.
 
 Then rerun `egress-check`.
+
+## A model works but its provider API does not
+
+A model name is not a domain. Some clients use a gateway domain for model access. For example, OpenCode Go uses `opencode.ai`, while the direct DeepSeek API uses `api.deepseek.com`.
+
+Check the actual base URL in the client configuration before editing the egress rules. If the model works and the direct API fails, the client is probably using a gateway, and the direct API is a separate policy decision.
 
 ## Fail-closed test succeeds through the primary WAN
 
