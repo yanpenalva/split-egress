@@ -130,6 +130,8 @@ CURL_TIMEOUT="8"
 ROUTING_TABLE="100"
 ROUTING_MARK="100"
 SECONDARY_GROUP="secondary"
+DIRECT_HOSTS="opencode.ai"
+DIRECT_DOMAINS="opencode.ai"
 ```
 
 `ROUTING_MARK` must be decimal. The kernel displays it as hexadecimal.

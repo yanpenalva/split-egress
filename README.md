@@ -160,6 +160,8 @@ RESULT: OK (0 issues, 0 warnings)
 | `SECONDARY_GROUP` | `secondary` | mihomo proxy group name |
 | `AI_HOSTS` | provider list | Hosts probed by the checker |
 | `AI_DOMAINS` | domain list | Domains checked in the config |
+| `DIRECT_HOSTS` | `opencode.ai` | Hosts probed without the proxy |
+| `DIRECT_DOMAINS` | `opencode.ai` | Domains that must not be proxied |
 
 `ROUTING_MARK` must be decimal. `ip rule` displays it in hexadecimal.
 

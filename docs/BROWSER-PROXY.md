@@ -46,6 +46,19 @@ Recommended combinations:
 | Quick direct browsing | Enabled | Set to **Direct** |
 | Troubleshooting | One layer only | Remove or disable the other layer |
 
+## Switch profiles and missing domains
+
+A switch profile only applies to domains that match its rules. If the default profile is **Direct**, a domain that is missing from the rule list bypasses the proxy even when a similar domain is listed.
+
+For example, a rule for `claude.ai` does not cover `claude.com`. Add both the apex and the wildcard for each service:
+
+- `claude.com`
+- `*.claude.com`
+- `claude.ai`
+- `*.claude.ai`
+
+Or set the default profile to the local proxy profile. Confirm the effective proxy before testing the site.
+
 ## Configuration
 
 HTTP proxy:

@@ -41,6 +41,7 @@ Warnings do not change the exit code when every required check passes. They indi
   OK    secondary interface: wwan0
   OK    routing mark: 100
   OK    AI domain rules: secondary
+  OK    direct domains: not proxied
   OK    mihomo config validation
 
 [2] Routing
@@ -58,12 +59,13 @@ Warnings do not change the exit code when every required check passes. They indi
 [4] AI providers
   OK    api.openai.com HTTP 421 0.18s DNS 203.0.113.30
   OK    api.anthropic.com HTTP 404 0.14s DNS 203.0.113.31
+  OK    claude.com HTTP 200 0.36s DNS 203.0.113.38
   OK    generativelanguage.googleapis.com HTTP 404 0.31s DNS 203.0.113.32
-  OK    opencode.ai HTTP 200 0.27s DNS 203.0.113.33
   OK    openrouter.ai HTTP 200 0.41s DNS 203.0.113.34
   OK    api.cline.bot HTTP 401 0.28s DNS 203.0.113.35
   OK    api.deepseek.com HTTP 401 0.26s DNS 203.0.113.36
   OK    api.z.ai HTTP 301 0.24s DNS 203.0.113.37
+  OK    opencode.ai HTTP 200 0.23s direct
 
 [5] Latency
   direct=0.14s proxy=0.16s host=api.anthropic.com
@@ -92,6 +94,7 @@ Checks:
 - The secondary interface from `config.env` exists in the mihomo config.
 - The decimal routing mark exists in the mihomo config.
 - Every domain in `AI_DOMAINS` has a `DOMAIN-SUFFIX,...,SECONDARY_GROUP` rule.
+- Every domain in `DIRECT_DOMAINS` does not have a proxy rule.
 - `mihomo -t` accepts the file.
 
 If you add a provider, add it to both `AI_DOMAINS` and the mihomo rules.
@@ -124,6 +127,8 @@ If `INTERNAL_URL` is set, the checker requests it directly, bypassing the proxy.
 ### `[4] AI providers`
 
 Each host in `AI_HOSTS` is requested through the proxy. Any HTTP status other than `000` counts as reachable.
+
+Each host in `DIRECT_HOSTS` is requested without the proxy and reported as `direct`.
 
 Expected status codes:
 

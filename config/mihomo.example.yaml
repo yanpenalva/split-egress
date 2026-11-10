@@ -26,8 +26,8 @@ dns:
     "+.anthropic.com": "https://1.1.1.1/dns-query"
     "claude.ai": "https://1.1.1.1/dns-query"
     "+.claude.ai": "https://1.1.1.1/dns-query"
-    "opencode.ai": "https://1.1.1.1/dns-query"
-    "+.opencode.ai": "https://1.1.1.1/dns-query"
+    "claude.com": "https://1.1.1.1/dns-query"
+    "+.claude.com": "https://1.1.1.1/dns-query"
     "openrouter.ai": "https://1.1.1.1/dns-query"
     "+.openrouter.ai": "https://1.1.1.1/dns-query"
     "cline.bot": "https://1.1.1.1/dns-query"
@@ -65,9 +65,9 @@ rules:
   - DOMAIN-SUFFIX,chatgpt.com,secondary
   - DOMAIN-SUFFIX,anthropic.com,secondary
   - DOMAIN-SUFFIX,claude.ai,secondary
+  - DOMAIN-SUFFIX,claude.com,secondary
   - DOMAIN-SUFFIX,gemini.google.com,secondary
   - DOMAIN-SUFFIX,generativelanguage.googleapis.com,secondary
-  - DOMAIN-SUFFIX,opencode.ai,secondary
   - DOMAIN-SUFFIX,openrouter.ai,secondary
   - DOMAIN-SUFFIX,cline.bot,secondary
   - DOMAIN-SUFFIX,deepseek.com,secondary

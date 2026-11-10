@@ -21,8 +21,10 @@ LATENCY_HOST="api.anthropic.com"
 ROUTING_TABLE="100"
 ROUTING_MARK="100"
 SECONDARY_GROUP="secondary"
-AI_HOSTS="api.openai.com api.anthropic.com gemini.google.com generativelanguage.googleapis.com opencode.ai openrouter.ai api.cline.bot api.deepseek.com api.z.ai"
-AI_DOMAINS="openai.com chatgpt.com anthropic.com claude.ai gemini.google.com generativelanguage.googleapis.com opencode.ai openrouter.ai cline.bot deepseek.com z.ai"
+AI_HOSTS="api.openai.com api.anthropic.com claude.com gemini.google.com generativelanguage.googleapis.com openrouter.ai api.cline.bot api.deepseek.com api.z.ai"
+AI_DOMAINS="openai.com chatgpt.com anthropic.com claude.ai claude.com gemini.google.com generativelanguage.googleapis.com openrouter.ai cline.bot deepseek.com z.ai"
+DIRECT_HOSTS="opencode.ai"
+DIRECT_DOMAINS="opencode.ai"
 FAIL=0
 WARN=0
 
@@ -96,7 +98,7 @@ resolve_interfaces() {
 }
 
 check_config() {
-    local domain missing
+    local domain missing direct_proxied
     section 1 "Configuration"
     if [[ ! -f "$MIHOMO_CONFIG" ]]; then
         fail "mihomo config not found: $MIHOMO_CONFIG"
@@ -122,6 +124,16 @@ check_config() {
     done
     if [[ "$missing" -eq 0 ]]; then
         ok "AI domain rules: $SECONDARY_GROUP"
+    fi
+    direct_proxied=0
+    for domain in $DIRECT_DOMAINS; do
+        if awk -v value="DOMAIN-SUFFIX,$domain,$SECONDARY_GROUP" '$1=="-" && $2==value {found=1} END {exit !found}' "$MIHOMO_CONFIG"; then
+            fail "direct domain still proxied: $domain"
+            direct_proxied=$((direct_proxied + 1))
+        fi
+    done
+    if [[ "$direct_proxied" -eq 0 ]]; then
+        ok "direct domains: not proxied"
     fi
     if command -v mihomo >/dev/null 2>&1; then
         if mihomo -t -f "$MIHOMO_CONFIG" >/dev/null 2>&1; then
@@ -254,6 +266,28 @@ check_providers() {
             fail "$host unreachable via $PROXY_URL"
         fi
     done
+    for host in $DIRECT_HOSTS; do
+        retry=""
+        for attempt in 1 2; do
+            result=$(curl -s -o /dev/null -w '%{http_code} %{time_total}' --max-time "$CURL_TIMEOUT" --noproxy '*' "https://$host" 2>/dev/null || true)
+            code="${result%% *}"
+            time="${result##* }"
+            if [[ -n "$code" && "$code" != "000" ]]; then
+                if [[ "$attempt" -eq 2 ]]; then
+                    retry=" retry"
+                fi
+                break
+            fi
+            if [[ "$attempt" -eq 1 ]]; then
+                sleep 1
+            fi
+        done
+        if [[ -n "$code" && "$code" != "000" ]]; then
+            ok "$host HTTP $code ${time}s direct$retry"
+        else
+            fail "$host unreachable direct"
+        fi
+    done
 }
 
 check_latency() {
@@ -288,6 +322,8 @@ dry_run() {
     printf '  mark:          %s (%s)\n' "$ROUTING_MARK" "$MARK_HEX"
     printf '  ai hosts:      %s\n' "$AI_HOSTS"
     printf '  ai domains:    %s\n' "$AI_DOMAINS"
+    printf '  direct hosts:  %s\n' "$DIRECT_HOSTS"
+    printf '  direct domains: %s\n' "$DIRECT_DOMAINS"
     printf '  checks:        routing ipv6 config proxy providers dns latency data\n'
 }
 
