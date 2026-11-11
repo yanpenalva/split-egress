@@ -64,6 +64,7 @@ Warnings do not change the exit code when every required check passes. They indi
   OK    openrouter.ai HTTP 200 0.41s DNS 203.0.113.34
   OK    api.cline.bot HTTP 401 0.28s DNS 203.0.113.35
   OK    api.deepseek.com HTTP 401 0.26s DNS 203.0.113.36
+  OK    platform.deepseek.com HTTP 403 0.35s DNS 203.0.113.39
   OK    api.z.ai HTTP 301 0.24s DNS 203.0.113.37
   OK    opencode.ai HTTP 200 0.23s direct
 
